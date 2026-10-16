@@ -82,11 +82,13 @@ final class TerminalSessionEngine: Sendable {
         let executionID = UUID()
 
         defer {
+            // AgentAtom 0.1.0 flag layout; avoid external static flag storage.
+            let fields = configuration.metadata.rawValue
             let record = AgenticExecutionMetadata(
                 operationID: operation,
                 executionID: executionID,
-                modelIdentifier: configuration.metadata.contains(.modelIdentifier) ? (configuration.model ?? defaultModel) : nil,
-                duration: configuration.metadata.contains(.duration) ? startTime.duration(to: ContinuousClock().now) : nil,
+                modelIdentifier: (fields & (1 << 0)) != 0 ? (configuration.model ?? defaultModel) : nil,
+                duration: (fields & (1 << 1)) != 0 ? startTime.duration(to: ContinuousClock().now) : nil,
                 promptTokens: nil,
                 completionTokens: nil
             )
