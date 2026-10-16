@@ -11,6 +11,7 @@ public final class TerminalAgentSession: TerminalSessionProtocol {
     public static var standardProviders: [TerminalProvider] {
         [
             TerminalProvider(name: "codex", defaultExecutablePath: "codex") { CodexTerminalSession(configuration: $0) },
+            TerminalProvider(name: "claude", defaultExecutablePath: "claude") { ClaudeTerminalSession(configuration: $0) },
             TerminalProvider(name: "antigravity", defaultExecutablePath: "agy") { AntigravityTerminalSession(configuration: $0) },
             TerminalProvider(name: "grok", defaultExecutablePath: "grok") { GrokTerminalSession(configuration: $0) }
         ]

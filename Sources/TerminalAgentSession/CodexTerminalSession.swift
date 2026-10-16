@@ -55,6 +55,7 @@ public final class CodexTerminalSession: TerminalSessionProtocol {
         arguments.append(option: "--model", optionalValue: configuration.model)
         arguments.append(option: "--output-schema", value: schemaFile.path)
         arguments.append(option: "-o", value: outputFile.path)
+        arguments.append(flag: "--json")
         arguments += configuration.extraArguments
         arguments.append("\(instructions)\n\nInput:\n\(input)")
 
@@ -63,7 +64,23 @@ public final class CodexTerminalSession: TerminalSessionProtocol {
             operation: operation,
             defaultModel: "codex",
             lineHandler: { line in
-                (extracted: nil, yieldChunk: line)
+                guard let data = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    return (extracted: nil, yieldChunk: line)
+                }
+                var yieldChunk: String?
+                var extracted: String?
+
+                let type = obj["type"] as? String ?? ""
+                if type == "item.completed", let item = obj["item"] as? [String: Any] {
+                    if let text = item["text"] as? String {
+                        extracted = text
+                        yieldChunk = text
+                    }
+                } else if type == "text" || type == "delta" || type == "content" {
+                    yieldChunk = (obj["text"] as? String) ?? (obj["content"] as? String)
+                }
+                return (extracted: extracted, yieldChunk: yieldChunk)
             },
             fallbackExtractor: { _ in
                 if FileManager.default.fileExists(atPath: outputFile.path),

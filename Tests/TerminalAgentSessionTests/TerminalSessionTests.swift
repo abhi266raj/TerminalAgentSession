@@ -126,6 +126,28 @@ struct TerminalSessionTests {
     }
 
 
+    @Test("ClaudeTerminalSession streams and decodes successfully via ModelledSpec convenience")
+    func testClaudeSessionStreamingAndExecute() async throws {
+        // Mock Claude script that outputs stream-json format
+        let script = """
+        #!/bin/bash
+        echo '{"type":"text","content":"Thinking..."}'
+        echo '{"type":"result","result":"{\\"reply\\":\\"Hello from Claude\\"}"}'
+        exit 0
+        """
+        try await withMockExecutable(script: script) { scriptURL in
+            let config = ClaudeTerminalSession.Configuration(executablePath: scriptURL.path)
+            guard let session = ClaudeTerminalSession(configuration: config) else {
+                Issue.record("Failed to initialize ClaudeTerminalSession with mock script")
+                return
+            }
+
+            let spec = MockEchoSpec(message: "Hi")
+            let output = try await session.execute(spec)
+            #expect(output.reply == "Hello from Claude")
+        }
+    }
+
     @Test("TerminalAgentSession provider explicit selection and custom provider registration")
     func testTerminalAgentSessionProviderSelection() throws {
         let script = """
@@ -158,9 +180,10 @@ struct TerminalSessionTests {
             genericDirectSession!,
             AntigravityTerminalSession(configuration: config)!,
             CodexTerminalSession(configuration: config)!,
+            ClaudeTerminalSession(configuration: config)!,
             GrokTerminalSession(configuration: config)!
         ]
-        #expect(terminalSessions.count == 6)
+        #expect(terminalSessions.count == 7)
         for s in terminalSessions {
             #expect(!s.configuration.executablePath.isEmpty)
         }
