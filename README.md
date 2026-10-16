@@ -53,10 +53,13 @@ for item in result.items {
 }
 ```
 
-## Distribution
+## Distribution & Dual Products
 
-Uses `import AgentAtom` from the published, checksum-pinned XCFramework.
-Do not add a sibling checkout or mix `AgentAtomSource` into the dependency graph.
-See [package ownership and runtime embedding](../../Documentation/docs/AGENTATOM_DEPENDENCY.md)
-for platform support, command-line packaging and AGPL-3.0-only notices.
-AgentAtom's implementation and internal tests are maintained upstream.
+`TerminalAgentSession` provides two SwiftPM library products from the exact same package URL:
+
+- **`TerminalAgentSession`** (`import TerminalAgentSession`):
+  Uses the standard binary `AgentAtom` framework. Recommended default for applications and servers consuming the binary `AgentAtom` XCFramework.
+- **`TerminalAgentSessionSource`** (`import TerminalAgentSessionSource`):
+  Pure source product that pairs directly with `AgentAtomSource` (`import AgentAtomSource`). Ideal for clean source-only builds and environments avoiding dynamic frameworks.
+
+> **Note**: Choose one product per dependency graph to keep type module identities consistent. Both products provide the exact same APIs and are licensed under **AGPL-3.0-only**.
