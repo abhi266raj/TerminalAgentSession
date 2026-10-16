@@ -2,6 +2,12 @@
 
 All notable changes to `TerminalAgentSession` will be documented in this file.
 
+## [0.1.4] - 2026-10-16
+
+### Fixed
+- Read metadata options through the pinned raw flag bits to avoid external AgentAtom static flag-storage addressors.
+- Verify independent model and duration flags for both library products.
+
 ## [0.1.3] - 2026-10-16
 
 ### Fixed
