@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import AgentAtomSource
 
 /// An `AgentAtom.AgenticSessionProtocol` implementation driving Antigravity CLI (`agy`).
@@ -50,15 +51,15 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
         }
 
         var arguments = CLIArguments()
-        arguments.append(flag: "--print")
         arguments.append(option: "--output-format", value: "stream-json")
         arguments.append(option: "--json-schema", value: schemaFile.path)
         arguments.append(flag: "--dangerously-skip-permissions")
         arguments.append(flag: "--disable-slash-commands")
         arguments.append(option: "--model", optionalValue: configuration.model)
         arguments += configuration.extraArguments
-        arguments.append("\(instructions)\n\nInput:\n\(input)")
+        arguments.append("--print=\(instructions)\n\nInput:\n\(input)")
 
+        let reportedFailure = Mutex(false)
         let request = TerminalSessionEngine.StreamExecutionRequest(
             arguments: arguments,
             operation: operation,
@@ -87,6 +88,13 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
                     }
                 } else if type == "result" || type == "completed" {
                     let resultDict = (obj["result"] as? [String: Any]) ?? obj
+                    let status = (resultDict["status"] as? String) ?? (obj["status"] as? String)
+                    let failed = (status.map { $0.lowercased() != "success" } ?? false)
+                        || (resultDict["is_error"] as? Bool == true) || (obj["is_error"] as? Bool == true)
+                    if failed {
+                        reportedFailure.withLock { $0 = true }
+                        return (extracted: nil, yieldChunk: nil)
+                    }
                     if let structured = resultDict["structured_output"] {
                         if let structuredData = try? JSONSerialization.data(withJSONObject: structured, options: [.sortedKeys]) {
                             extracted = String(decoding: structuredData, as: UTF8.self)
@@ -102,6 +110,10 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
                 return (extracted: extracted, yieldChunk: yieldChunk)
             }
         )
-        return await engine.runStreamedExecution(request: request, yield: yield)
+        let result = await engine.runStreamedExecution(request: request, yield: yield)
+        if case .success = result, reportedFailure.withLock({ $0 }) {
+            return .failure(.generationFailed(reason: "Antigravity reported an unsuccessful result."))
+        }
+        return result
     }
 }
