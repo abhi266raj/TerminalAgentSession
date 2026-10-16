@@ -9,8 +9,13 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
     public typealias Configuration = TerminalAgentConfiguration
     private let engine: TerminalSessionEngine
 
-    public init?(configuration: Configuration = Configuration(executablePath: "agy")) {
-        guard let engine = TerminalSessionEngine(configuration: configuration) else { return nil }
+    public init?(configuration: Configuration = Configuration(executablePath: "agy", persistenceMode: .ephemeral)) {
+        var adjusted = configuration
+        // Antigravity noninteractive batch/stream CLI execution requires ephemeral mode to pass prompt arguments
+        if case .persistentStdio = configuration.persistenceMode {
+            adjusted.persistenceMode = .ephemeral
+        }
+        guard let engine = TerminalSessionEngine(configuration: adjusted) else { return nil }
         self.engine = engine
     }
 
@@ -22,7 +27,6 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
         engine.purgeMemory()
     }
 
-
     public func stream(
         to input: String,
         instructions: String,
@@ -30,10 +34,27 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
         for operation: ObjectIdentifier,
         yield: @Sendable (String) async -> Void
     ) async -> Result<String, AgenticError> {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("agy_\(UUID().uuidString)")
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            return .failure(AgenticError(action: "Failed to create temporary directory", error: error))
+        }
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let schemaFile = tempDir.appendingPathComponent("schema.json")
+        do {
+            try schema.rawValue.write(to: schemaFile, atomically: true, encoding: .utf8)
+        } catch {
+            return .failure(AgenticError(action: "Failed to write schema", error: error))
+        }
+
         var arguments = CLIArguments()
+        arguments.append(flag: "--print")
         arguments.append(option: "--output-format", value: "stream-json")
-        arguments.append(option: "--json-schema", value: schema.rawValue)
+        arguments.append(option: "--json-schema", value: schemaFile.path)
         arguments.append(flag: "--dangerously-skip-permissions")
+        arguments.append(flag: "--disable-slash-commands")
         arguments.append(option: "--model", optionalValue: configuration.model)
         arguments += configuration.extraArguments
         arguments.append("\(instructions)\n\nInput:\n\(input)")
@@ -43,28 +64,42 @@ public final class AntigravityTerminalSession: TerminalSessionProtocol {
             operation: operation,
             defaultModel: "agy",
             lineHandler: { line in
-                if let data = line.data(using: .utf8),
-                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    var yieldChunk: String?
-                    var extracted: String?
-                    if let type = obj["type"] as? String {
-                        if type == "text" || type == "delta", let content = obj["content"] as? String {
-                            yieldChunk = content
-                        } else if type == "result" || type == "completed" {
-                            if let res = obj["response"] as? String {
-                                extracted = res
-                            } else if let resObj = obj["response"] {
-                                if let resData = try? JSONSerialization.data(withJSONObject: resObj, options: [.sortedKeys]) {
-                                    extracted = String(decoding: resData, as: UTF8.self)
-                                }
-                            }
-                        }
-                    }
-                    return (extracted: extracted, yieldChunk: yieldChunk)
-                } else {
+                guard let data = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     let isJSON = line.hasPrefix("{") && line.hasSuffix("}")
                     return (extracted: isJSON ? line : nil, yieldChunk: line)
                 }
+
+                var yieldChunk: String?
+                var extracted: String?
+
+                let type = (obj["type"] as? String) ?? (obj["event"] as? String) ?? ""
+
+                if type == "text" || type == "delta" {
+                    if let content = obj["content"] as? String {
+                        yieldChunk = content
+                    } else if let delta = obj["delta"] as? [String: Any], let text = delta["text"] as? String {
+                        yieldChunk = text
+                    }
+                } else if type == "step_update", let step = obj["step_update"] as? [String: Any] {
+                    if let text = step["text_delta"] as? String, !text.isEmpty {
+                        yieldChunk = text
+                    }
+                } else if type == "result" || type == "completed" {
+                    let resultDict = (obj["result"] as? [String: Any]) ?? obj
+                    if let structured = resultDict["structured_output"] {
+                        if let structuredData = try? JSONSerialization.data(withJSONObject: structured, options: [.sortedKeys]) {
+                            extracted = String(decoding: structuredData, as: UTF8.self)
+                        }
+                    } else if let res = resultDict["response"] as? String {
+                        extracted = res
+                    } else if let resObj = resultDict["response"] {
+                        if let resData = try? JSONSerialization.data(withJSONObject: resObj, options: [.sortedKeys]) {
+                            extracted = String(decoding: resData, as: UTF8.self)
+                        }
+                    }
+                }
+                return (extracted: extracted, yieldChunk: yieldChunk)
             }
         )
         return await engine.runStreamedExecution(request: request, yield: yield)

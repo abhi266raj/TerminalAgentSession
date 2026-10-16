@@ -2,6 +2,13 @@
 
 All notable changes to `TerminalAgentSession` will be documented in this file.
 
+## [0.1.2] - 2026-10-16
+
+### Fixed
+- Fixed `AntigravityTerminalSession` process persistence mode: defaults to ephemeral mode so prompt arguments are correctly passed rather than dropped.
+- Added noninteractive `--print` flag and permissions flags to Antigravity CLI invocation.
+- Enhanced Antigravity stream parser to handle `step_update`, `text_delta`, `structured_output`, and native `result` payload envelopes.
+
 ## [0.1.1] - 2026-10-16
 
 ### Added
