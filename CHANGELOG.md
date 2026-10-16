@@ -2,6 +2,12 @@
 
 All notable changes to `TerminalAgentSession` will be documented in this file.
 
+## [0.1.1] - 2026-10-16
+
+### Added
+- Added dual library products: `TerminalAgentSession` (for `AgentAtom` dynamic binary) and `TerminalAgentSessionSource` (for `AgentAtomSource` pure source build).
+- Added `TerminalAgentSessionSourceTests` test suite validating the pure source target.
+
 ## [0.1.0] - 2026-10-16
 
 ### Added
