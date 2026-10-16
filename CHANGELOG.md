@@ -2,6 +2,13 @@
 
 All notable changes to `TerminalAgentSession` will be documented in this file.
 
+## [0.1.3] - 2026-10-16
+
+### Fixed
+- Attach the Antigravity print prompt to `--print=` so options cannot be consumed as the prompt.
+- Propagate native failed statuses and error results even when the CLI exits successfully and supplies structured output.
+- Apply both fixes to the binary-dependency and source-dependency library products.
+
 ## [0.1.2] - 2026-10-16
 
 ### Fixed
